@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Northwind Air | Demo</title>
+  <meta name="description" content="Northwind Air demo: book flights, compare fares, change a booking, check flight status, and contact our team.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <div class="demo-bar">Demo site. No real bookings, payments, or emails are sent.</div>
+
+  <header class="site-header">
+    <a class="brand" href="#top">Northwind Air</a>
+    <nav aria-label="Main">
+      <a href="#tools" data-goto="book">Book</a>
+      <a href="#tools" data-goto="fares">Fares</a>
+      <a href="#tools" data-goto="rebook">Rebook</a>
+      <a href="#tools" data-goto="status">Flight status</a>
+      <a href="#help">Contact us</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <h1>Where to next?</h1>
+      <p class="lede">Book a flight, compare fares, change a trip, or check on a flight. Everything is in one place.</p>
+    </section>
+
+    <section class="tools" id="tools" aria-label="Travel tools">
+      <div class="tabs" role="tablist" aria-label="Choose a task">
+        <button type="button" role="tab" id="tab-book" aria-controls="panel-book" aria-selected="true" data-tab="book">Book</button>
+        <button type="button" role="tab" id="tab-fares" aria-controls="panel-fares" aria-selected="false" tabindex="-1" data-tab="fares">Fares</button>
+        <button type="button" role="tab" id="tab-rebook" aria-controls="panel-rebook" aria-selected="false" tabindex="-1" data-tab="rebook">Rebook</button>
+        <button type="button" role="tab" id="tab-status" aria-controls="panel-status" aria-selected="false" tabindex="-1" data-tab="status">Flight status</button>
+      </div>
+
+      <!-- Book -->
+      <form id="panel-book" class="panel" role="tabpanel" aria-labelledby="tab-book">
+        <fieldset class="trip-type">
+          <legend class="sr">Trip type</legend>
+          <label><input type="radio" name="trip" value="round" checked> Round trip</label>
+          <label><input type="radio" name="trip" value="oneway"> One way</label>
+        </fieldset>
+        <div class="grid">
+          <label>From <select name="from" data-airports required></select></label>
+          <label>To <select name="to" data-airports required></select></label>
+          <label>Depart <input type="date" name="depart" required></label>
+          <label>Return <input type="date" name="return"></label>
+          <label>Passengers
+            <select name="pax">
+              <option value="1">1 passenger</option>
+              <option value="2">2 passengers</option>
+              <option value="3">3 passengers</option>
+              <option value="4">4 passengers</option>
+              <option value="5">5 passengers</option>
+              <option value="6">6 passengers</option>
+            </select>
+          </label>
+          <label>Cabin
+            <select name="cabin">
+              <option value="Economy">Economy</option>
+              <option value="Premium">Premium Economy</option>
+              <option value="Business">Business</option>
+            </select>
+          </label>
+        </div>
+        <div class="actions"><button class="primary" type="submit">Search flights</button></div>
+      </form>
+
+      <!-- Fares -->
+      <form id="panel-fares" class="panel" role="tabpanel" aria-labelledby="tab-fares" hidden>
+        <div class="grid">
+          <label>From <select name="from" data-airports required></select></label>
+          <label>To <select name="to" data-airports required></select></label>
+          <label>Date <input type="date" name="date" required></label>
+        </div>
+        <div class="actions"><button class="primary" type="submit">Show fares</button></div>
+      </form>
+
+      <!-- Rebook -->
+      <form id="panel-rebook" class="panel" role="tabpanel" aria-labelledby="tab-rebook" hidden>
+        <div class="grid">
+          <label>Confirmation code <input name="pnr" required maxlength="6" pattern="[A-Za-z0-9]{6}" autocomplete="off" placeholder="e.g. DEMO01"></label>
+          <label>Last name <input name="last" required autocomplete="family-name" placeholder="e.g. Rivera"></label>
+        </div>
+        <div class="actions"><button class="primary" type="submit">Find booking</button></div>
+        <p class="hint">Try the demo booking: code <strong>DEMO01</strong>, last name <strong>Rivera</strong>.</p>
+      </form>
+
+      <!-- Status -->
+      <form id="panel-status" class="panel" role="tabpanel" aria-labelledby="tab-status" hidden>
+        <div class="grid">
+          <label>Flight number <input name="number" required placeholder="NW 123" autocomplete="off"></label>
+          <label>Date <input type="date" name="date" required></label>
+        </div>
+        <div class="actions"><button class="primary" type="submit">Check status</button></div>
+      </form>
+    </section>
+
+    <section id="results" class="results" aria-live="polite" aria-label="Results"></section>
+
+    <section class="help" id="help" aria-labelledby="help-title">
+      <h2 id="help-title">Contact us</h2>
+      <p class="lede">Talk to a specialist by phone, request a callback, send a message, or start a chat.</p>
+
+      <div class="help-grid">
+        <article class="card">
+          <h3>Call the contact center</h3>
+          <p class="big"><a href="tel:+18005550142">+1 (800) 555-0142</a></p>
+          <p>Open every day, 6 am to 11 pm local time.</p>
+          <p class="hint">Estimated wait: about 4 minutes. Demo estimate.</p>
+        </article>
+
+        <article class="card">
+          <h3>Request a callback</h3>
+          <form id="callback-form" class="form-stack">
+            <label>Name <input name="name" required autocomplete="name"></label>
+            <label>Phone <input name="phone" type="tel" required autocomplete="tel"></label>
+            <label>When should we call?
+              <select name="when">
+                <option>As soon as possible</option>
+                <option>Later today</option>
+                <option>Tomorrow morning</option>
+              </select>
+            </label>
+            <div class="actions"><button class="primary small" type="submit">Request callback</button></div>
+            <p id="callback-status" class="status" role="status"></p>
+          </form>
+        </article>
+
+        <article class="card card-wide">
+          <h3>Send us a message</h3>
+          <form id="email-form" class="form-stack">
+            <div class="grid">
+              <label>Name <input name="name" required autocomplete="name"></label>
+              <label>Email <input name="email" type="email" required autocomplete="email"></label>
+              <label>Topic
+                <select name="topic">
+                  <option>Booking</option>
+                  <option>Fares</option>
+                  <option>Changing a booking</option>
+                  <option>Flight status</option>
+                  <option>Refund</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label>Confirmation code (optional) <input name="pnr" maxlength="6" autocomplete="off"></label>
+            </div>
+            <label>Message <textarea name="message" required minlength="10" placeholder="Tell us what you need help with."></textarea></label>
+            <div class="actions"><button class="primary small" type="submit">Send message</button></div>
+            <p id="email-status" class="status" role="status"></p>
+          </form>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Northwind Air is a fictional demo company. All flights, fares, and contact details are sample data.</p>
+  </footer>
+
+  <button type="button" id="chat-toggle" class="chat-launch" aria-expanded="false" aria-controls="chat-panel">Chat with us</button>
+
+  <aside id="chat-panel" class="chat-panel" aria-label="Chat with Northwind Air" hidden>
+    <div class="chat-head">
+      <strong>Northwind assistant</strong>
+      <button type="button" id="chat-close" class="ghost small" aria-label="Close chat">Close</button>
+    </div>
+    <div id="chat-log" class="chat-log" role="log" aria-live="polite"></div>
+    <div id="chat-chips" class="chat-chips"></div>
+    <form id="chat-form" class="chat-form">
+      <label class="sr" for="chat-input">Type a message</label>
+      <input id="chat-input" type="text" autocomplete="off" placeholder="Type a message" maxlength="300">
+      <button class="primary small" type="submit">Send</button>
+    </form>
+  </aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
