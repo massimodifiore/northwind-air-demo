@@ -571,119 +571,25 @@
     callbackForm.reset();
   });
 
-  /* ---------- Chat assistant (rule-based demo) ---------- */
+  /* ---------- Chat: Genesys Cloud Web Messenger ---------- */
 
-  const chatToggle = $('#chat-toggle');
-  const chatPanel = $('#chat-panel');
-  const chatLog = $('#chat-log');
-  const chatChips = $('#chat-chips');
-  const chatForm = $('#chat-form');
-  const chatInput = $('#chat-input');
+  // The Genesys snippet in index.html loads the messenger for deployment
+  // edd3cf4f-ba14-4251-9fd5-857308e8ef38. This button opens it once it is ready.
+  const chatButton = $('#chat-toggle');
+  let messengerReady = false;
 
-  const TAB_NAMES = { book: 'Book', fares: 'Fares', rebook: 'Rebook', status: 'Flight status' };
-
-  function scrollToId(id) {
-    document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function addMsg(who, text) {
-    const d = document.createElement('p');
-    d.className = 'msg ' + who;
-    d.textContent = text;
-    chatLog.appendChild(d);
-    chatLog.scrollTop = chatLog.scrollHeight;
-    return d;
-  }
-
-  function setChips(list) {
-    chatChips.innerHTML = '';
-    list.forEach(([label, action]) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      b.textContent = label;
-      b.addEventListener('click', () => {
-        addMsg('user', label);
-        setChips([]);
-        action();
-      });
-      chatChips.appendChild(b);
-    });
-  }
-
-  const goTab = (tab) => () => {
-    showTab(tab);
-    scrollToId('tools');
-    addMsg('bot', `I opened the ${TAB_NAMES[tab]} tab. Let me know if you need anything else.`);
+  const showChatUnavailable = () => {
+    showError('Chat is still loading. Please try again in a moment, or call +1 (800) 555-0142.');
+    document.getElementById('help').scrollIntoView({ behavior: 'smooth' });
   };
 
-  const toPerson = () => {
-    addMsg('bot', 'Connecting you to a specialist. In this demo, the typical wait is about 4 minutes. You can also call +1 (800) 555-0142 or request a callback under Contact us.');
-    setChips([['Request a callback', () => { scrollToId('callback-form'); addMsg('bot', 'Here is the callback form.'); }]]);
-  };
-
-  const STARTERS = [
-    ['Book a flight', goTab('book')],
-    ['Check fares', goTab('fares')],
-    ['Change a booking', goTab('rebook')],
-    ['Flight status', goTab('status')],
-    ['Talk to a person', toPerson]
-  ];
-
-  const RULES = [
-    { re: /^(hi|hello|hey)\b/, text: 'Hi. I can help with booking, fares, changes, and flight status. What would you like to do?', chips: STARTERS },
-    { re: /human|agent|person|representative|speak|call|phone/, text: null, action: toPerson },
-    { re: /refund|cancel/, text: 'Refund requests take 5 to 7 business days in this demo. A specialist can review your case.', chips: [['Talk to a person', toPerson]] },
-    { re: /rebook|change|reschedul|modify/, text: 'To change a booking, you need your confirmation code and last name.', chips: [['Change a booking', goTab('rebook')]] },
-    { re: /book|ticket|fly|flight to/, text: 'You can search and book flights in the Book tab.', chips: [['Open Book', goTab('book')]] },
-    { re: /fare|price|cost|cheap/, text: 'The Fares tab shows the lowest prices for seven days at once.', chips: [['Open Fares', goTab('fares')]] },
-    { re: /status|delay|late|gate|on time/, text: 'Enter a flight number and date in Flight status.', chips: [['Open Flight status', goTab('status')]] },
-    { re: /bag|luggage|baggage|carry/, text: 'In this demo, one carry-on bag and one personal item are included. Checked bags are charged. A specialist can confirm the limits for your route.', chips: [['Talk to a person', toPerson]] },
-    { re: /.*/, text: "I'm not sure I understood that. Try one of these options, or talk to a specialist.", chips: STARTERS }
-  ];
-
-  function respond(text) {
-    addMsg('user', text);
-    setChips([]);
-    const lower = text.toLowerCase();
-    const rule = RULES.find((r) => r.re.test(lower));
-    const typing = addMsg('bot typing', 'Typing...');
-    setTimeout(() => {
-      typing.remove();
-      if (rule.action) {
-        rule.action();
-        return;
-      }
-      addMsg('bot', rule.text);
-      setChips(rule.chips || []);
-    }, 450);
+  if (window.Genesys) {
+    window.Genesys('subscribe', 'Messenger.ready', () => { messengerReady = true; });
   }
 
-  function openChat() {
-    chatPanel.hidden = false;
-    chatToggle.setAttribute('aria-expanded', 'true');
-    if (!chatLog.children.length) {
-      addMsg('bot', 'Hi, I am the Northwind assistant. How can I help today?');
-      setChips(STARTERS);
-    }
-    chatInput.focus();
-  }
-
-  function closeChat() {
-    chatPanel.hidden = true;
-    chatToggle.setAttribute('aria-expanded', 'false');
-    chatToggle.focus();
-  }
-
-  chatToggle.addEventListener('click', () => (chatPanel.hidden ? openChat() : closeChat()));
-  $('#chat-close').addEventListener('click', closeChat);
-
-  chatForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = chatInput.value.trim();
-    if (!text) return;
-    chatInput.value = '';
-    respond(text);
+  chatButton.addEventListener('click', () => {
+    if (!window.Genesys || !messengerReady) return showChatUnavailable();
+    window.Genesys('command', 'Messenger.open', {}, () => {}, showChatUnavailable);
   });
 
   /* ---------- Start ---------- */
