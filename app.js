@@ -571,25 +571,63 @@
     callbackForm.reset();
   });
 
-  /* ---------- Chat: Genesys Cloud Web Messenger ---------- */
+  /* ---------- Chat: Genesys Cloud Web Messenger (loads on demand) ---------- */
 
-  // The Genesys snippet in index.html loads the messenger for deployment
-  // edd3cf4f-ba14-4251-9fd5-857308e8ef38. This button opens it once it is ready.
+  // The messenger script is not loaded on page load. It loads the first time
+  // "Chat with us" is clicked, then opens. Deployment: edd3cf4f-ba14-4251-9fd5-857308e8ef38
+  const GENESYS = {
+    url: 'https://apps.usw2.pure.cloud/genesys-bootstrap/genesys.min.js',
+    environment: 'usw2',
+    deploymentId: 'edd3cf4f-ba14-4251-9fd5-857308e8ef38'
+  };
+
   const chatButton = $('#chat-toggle');
+  const chatLabel = chatButton.textContent;
+  let messengerRequested = false;
   let messengerReady = false;
 
   const showChatUnavailable = () => {
-    showError('Chat is still loading. Please try again in a moment, or call +1 (800) 555-0142.');
+    chatButton.disabled = false;
+    chatButton.textContent = chatLabel;
+    showError('Chat is not available right now. Please try again in a moment, or call +1 (800) 555-0142.');
     document.getElementById('help').scrollIntoView({ behavior: 'smooth' });
   };
 
-  if (window.Genesys) {
-    window.Genesys('subscribe', 'Messenger.ready', () => { messengerReady = true; });
+  const openMessenger = () => {
+    chatButton.disabled = false;
+    chatButton.textContent = chatLabel;
+    window.Genesys('command', 'Messenger.open', {}, () => {}, showChatUnavailable);
+  };
+
+  function loadMessenger() {
+    messengerRequested = true;
+
+    // Same queue stub the Genesys bootstrap snippet creates.
+    window._genesysJs = 'Genesys';
+    window.Genesys = window.Genesys || function () {
+      (window.Genesys.q = window.Genesys.q || []).push(arguments);
+    };
+    window.Genesys.t = 1 * new Date();
+    window.Genesys.c = { environment: GENESYS.environment, deploymentId: GENESYS.deploymentId };
+
+    window.Genesys('subscribe', 'Messenger.ready', () => {
+      messengerReady = true;
+      openMessenger();
+    });
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.charset = 'utf-8';
+    script.src = GENESYS.url;
+    script.onerror = showChatUnavailable;
+    document.head.appendChild(script);
   }
 
   chatButton.addEventListener('click', () => {
-    if (!window.Genesys || !messengerReady) return showChatUnavailable();
-    window.Genesys('command', 'Messenger.open', {}, () => {}, showChatUnavailable);
+    if (messengerReady) return openMessenger();
+    chatButton.disabled = true;
+    chatButton.textContent = 'Opening chat...';
+    if (!messengerRequested) loadMessenger();
   });
 
   /* ---------- Start ---------- */
