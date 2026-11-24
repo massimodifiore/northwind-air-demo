@@ -120,6 +120,7 @@
   const statusForm = $('#panel-status');
   const tabs = $$('[role="tab"]');
 
+  let siteTask = null;     // last tool submitted, sent to chat as site_last_task
   let draft = null;        // booking in progress
   let activeBooking = null; // booking being changed
   let changeIdx = null;     // leg index being changed
@@ -144,6 +145,18 @@
 
   function setVal(form, name, value) {
     form.elements[name].value = value;
+  }
+
+  function sendSiteTask() {
+    window.Genesys('command', 'Database.set', {
+      messaging: { customAttributes: { site_last_task: siteTask } }
+    });
+  }
+
+  // One of book, fares, rebook or status. The chat reads it as a hint only.
+  function setSiteTask(name) {
+    siteTask = name;
+    if (window.Genesys) sendSiteTask();
   }
 
   /* ---------- Tabs ---------- */
@@ -237,6 +250,7 @@
 
     if (from === to) return showError('Choose two different airports.');
     if (roundTrip && (!ret || ret < depart)) return showError('The return date needs to be on or after the depart date.');
+    setSiteTask('book');
 
     draft = {
       from, to, depart, ret,
@@ -346,6 +360,7 @@
     const f = new FormData(rebookForm);
     const pnr = f.get('pnr').trim().toUpperCase();
     const last = f.get('last').trim().toLowerCase();
+    setSiteTask('rebook');
     const b = bookings.find((x) => x.pnr === pnr && x.lastName.toLowerCase() === last);
     if (!b) {
       return showError("We couldn't find a booking with that code and last name. Check both and try again. For the demo, use DEMO01 and Rivera.");
@@ -439,6 +454,7 @@
     const to = f.get('to');
     const date = f.get('date');
     if (from === to) return showError('Choose two different airports.');
+    setSiteTask('fares');
 
     const rows = [-3, -2, -1, 0, 1, 2, 3]
       .map((k) => addDays(date, k))
@@ -488,6 +504,7 @@
     num = num.replace(/^([A-Z]{2})\s?(\d{1,4})$/, '$1 $2');
     const date = f.get('date');
     if (!/^[A-Z]{2} \d{1,4}$/.test(num)) return showError('Enter a flight number like NW 123.');
+    setSiteTask('status');
 
     const r = rng(hash(num + '|' + date));
     const states = [['On time', 0], ['On time', 0], ['Delayed', 15], ['Delayed', 40], ['Boarding', 0], ['Departed', 0], ['Landed', 0]];
@@ -612,6 +629,7 @@
     };
     window.Genesys.t = 1 * new Date();
     window.Genesys.c = { environment: GENESYS.environment, deploymentId: GENESYS.deploymentId };
+    if (siteTask) sendSiteTask();
 
     window.Genesys('subscribe', 'Messenger.ready', () => {
       messengerReady = true;
