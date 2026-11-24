@@ -574,15 +574,18 @@
   /* ---------- Chat: Genesys Cloud Web Messenger (loads on demand) ---------- */
 
   // The messenger script is not loaded on page load. It loads the first time
-  // "Chat with us" is clicked, then opens. Deployment: edd3cf4f-ba14-4251-9fd5-857308e8ef38
+  // "Chat with us" is clicked, then opens. Deployment: LaunchPad-Airline, which
+  // routes to Airline-IBMSG-General-Inquiry-Front-Door and only accepts
+  // massimodifiore.github.io.
   const GENESYS = {
     url: 'https://apps.usw2.pure.cloud/genesys-bootstrap/genesys.min.js',
-    environment: 'usw2',
-    deploymentId: 'edd3cf4f-ba14-4251-9fd5-857308e8ef38'
+    environment: 'prod-usw2',
+    deploymentId: '8e8be64b-879d-4898-b64a-4bf5d3209917'
   };
 
   const chatButton = $('#chat-toggle');
   const chatLabel = chatButton.textContent;
+  $$('[data-chat-open]').forEach((b) => b.addEventListener('click', () => chatButton.click()));
   let messengerRequested = false;
   let messengerReady = false;
 
