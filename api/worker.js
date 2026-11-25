@@ -48,13 +48,13 @@ function date(value, field, notBefore) {
 }
 
 function cabin(value) {
-  const c = CABINS[fold(value)];
+  const c = fold(value) ? CABINS[fold(value)] : 'Economy';
   if (!c) throw new HttpError(400, 'cabin must be Economy, Premium or Business.');
   return c;
 }
 
 function passengers(value) {
-  const n = Number(value);
+  const n = value === undefined || value === null || value === '' ? 1 : Number(value);
   if (!Number.isInteger(n) || n < 1 || n > 6) throw new HttpError(400, 'passengers must be 1 to 6.');
   return n;
 }
@@ -123,7 +123,7 @@ function checkBooking(b, pnr) {
 /* ---------- AVA routes ---------- */
 
 function bookingRequest(q) {
-  const t = trip(q.trip_type);
+  const t = fold(q.trip_type) ? trip(q.trip_type) : (q.return_date ? 'round_trip' : 'one_way');
   const from = airport(q.from_airport, 'from_airport');
   const to = airport(q.to_airport, 'to_airport');
   if (from === to) throw new HttpError(400, 'from_airport and to_airport must differ.');
