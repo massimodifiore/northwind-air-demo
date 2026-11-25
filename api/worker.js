@@ -183,6 +183,30 @@ async function createBooking(env, q) {
   return { booking_code: pnr, total_fare: legs.reduce((s, l) => s + l.fare, 0) * r.passengers };
 }
 
+/* An unknown code and a wrong last name get the same answer, so a caller cannot probe for codes. */
+async function lookupBooking(env, q) {
+  const pnr = String(q.booking_code || '').replace(/\s+/g, '').toUpperCase();
+  const miss = new HttpError(404, 'No booking matches that code and last name.');
+  if (!/^[A-Z0-9]{6}$/.test(pnr) || !fold(q.last_name)) throw miss;
+  const b = (await load(env)).bookings[pnr];
+  if (!b || fold(b.lastName) !== fold(q.last_name)) throw miss;
+  const [out, back] = b.legs;
+  return {
+    booking_code: b.pnr,
+    first_name: b.firstName,
+    last_name: b.lastName,
+    trip_type: back ? 'round_trip' : 'one_way',
+    from_airport: out.from, from_city: D.cityOf(out.from),
+    to_airport: out.to, to_city: D.cityOf(out.to),
+    depart_date: out.date,
+    depart_flight: out.flight.number,
+    return_date: back ? back.date : '',
+    return_flight: back ? back.flight.number : '',
+    cabin: b.cabin,
+    passengers: b.pax
+  };
+}
+
 function keyOk(req, env) {
   const a = req.headers.get('x-api-key') || '';
   const b = env.AVA_API_KEY || '';
@@ -208,6 +232,7 @@ async function route(req, env) {
     if (m === 'POST' && p === '/ava/booking-request') return json(req, { inquiry_route: 'booking', ...bookingRequest(await body(req)) });
     if (m === 'GET' && p === '/ava/flights') return json(req, flights(q));
     if (m === 'POST' && p === '/ava/bookings') return json(req, await createBooking(env, await body(req)), 201);
+    if (m === 'POST' && p === '/ava/booking-lookup') return json(req, await lookupBooking(env, await body(req)));
     throw new HttpError(404, 'No such route.');
   }
 
