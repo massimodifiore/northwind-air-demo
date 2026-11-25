@@ -9,6 +9,7 @@ A static demo site for an airline. It shows booking, fare search, rebooking, fli
 | `index.html` | Page structure and all sections |
 | `admin.html` | Demo admin page, linked from the site footer |
 | `styles.css` | Visual design |
+| `images/hero-*.jpg` | Home page hero photos (airplane, cabin, check-in desk), shown as a crossfade |
 | `data.js` | Shared by both pages and the Worker: airports, fares, flight generator, and the API client |
 | `app.js` | Site logic: search, booking, rebooking, fares, status, forms, chat |
 | `admin.js` | Admin logic: create, change and delete bookings, flight status overrides, reset |
@@ -95,6 +96,9 @@ Most of the content is easy to change:
 - **Fares and change fees:** edit `CABIN_MULT` and `CHANGE_FEE` in `data.js`.
 - **Sample booking:** edit `seed()` in `data.js`.
 - **Chat:** edit `GENESYS` in `app.js` to point at another Messenger deployment.
+- **Hero photos:** replace the files in `images/` and keep their names, or change the `.slide-*` rules in `styles.css`. Each slide shows for 6 seconds; visitors who prefer reduced motion see only the airplane. Use photos with no real airline name, logo or livery visible.
+
+The hero photos are from [Pexels](https://www.pexels.com/license/), free to use without attribution: [airplane at sunset](https://www.pexels.com/photo/9215626/), [cabin crew serving passengers](https://www.pexels.com/photo/32829123/) and [check-in queue](https://www.pexels.com/photo/38248818/). The airline and airport signs in the check-in photo are blurred.
 
 ## Notes for a real deployment
 
