@@ -189,7 +189,8 @@ async function lookupBooking(env, q) {
   const miss = new HttpError(404, 'No booking matches that code and last name.');
   if (!/^[A-Z0-9]{6}$/.test(pnr) || !fold(q.last_name)) throw miss;
   const b = (await load(env)).bookings[pnr];
-  if (!b || fold(b.lastName) !== fold(q.last_name)) throw miss;
+  const words = (s) => ` ${fold(s).replace(/[^a-z'-]+/g, ' ').trim()} `;
+  if (!b || !words(q.last_name).includes(words(b.lastName))) throw miss;
   const [out, back] = b.legs;
   return {
     booking_code: b.pnr,
