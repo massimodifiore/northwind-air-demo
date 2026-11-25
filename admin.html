@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Northwind Air | Demo admin</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <div class="demo-bar">Demo admin. Changes apply to this browser only and are not visible to the chat assistant or agents.</div>
+
+  <header class="site-header">
+    <a class="brand" href="index.html">Northwind Air</a>
+    <nav aria-label="Admin">
+      <a href="#bookings">Bookings</a>
+      <a href="#status">Flight status</a>
+      <a href="#reset">Reset</a>
+      <a href="index.html">Back to site</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <h1>Demo admin</h1>
+      <p class="lede">Prepare bookings and flight statuses before a demonstration, then reset when you are done.</p>
+    </section>
+
+    <!-- Bookings -->
+    <section class="admin-section" id="bookings" aria-labelledby="bookings-title">
+      <div class="section-head">
+        <h2 id="bookings-title">Bookings</h2>
+        <button class="primary small" type="button" id="new-booking">New booking</button>
+      </div>
+      <p id="bookings-status" class="status" role="status"></p>
+      <div class="table-wrap card flush">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Code</th>
+              <th scope="col">Passenger</th>
+              <th scope="col">Flights</th>
+              <th scope="col">Cabin</th>
+              <th scope="col">Passengers</th>
+              <th scope="col"><span class="sr">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="booking-rows"></tbody>
+        </table>
+      </div>
+
+      <form id="booking-form" class="card form-stack" hidden novalidate>
+        <h3 id="booking-form-title">New booking</h3>
+        <div class="grid">
+          <label>Confirmation code <input name="pnr" maxlength="6" pattern="[A-Za-z0-9]{6}" autocomplete="off" placeholder="Leave empty to generate"></label>
+          <label>First name <input name="first" required autocomplete="off"></label>
+          <label>Last name <input name="last" required autocomplete="off"></label>
+          <label>Email <input name="email" type="email" required autocomplete="off"></label>
+          <label>Cabin
+            <select name="cabin">
+              <option value="Economy">Economy</option>
+              <option value="Premium">Premium Economy</option>
+              <option value="Business">Business</option>
+            </select>
+          </label>
+          <label>Passengers
+            <select name="pax">
+              <option>1</option><option>2</option><option>3</option>
+              <option>4</option><option>5</option><option>6</option>
+            </select>
+          </label>
+        </div>
+        <fieldset class="trip-type">
+          <legend class="sr">Trip type</legend>
+          <label><input type="radio" name="trip" value="oneway" checked> One way</label>
+          <label><input type="radio" name="trip" value="round"> Round trip</label>
+        </fieldset>
+        <div class="grid">
+          <label>From <select name="from" data-airports required></select></label>
+          <label>To <select name="to" data-airports required></select></label>
+          <label>Depart <input type="date" name="depart" required></label>
+          <label>Outbound flight <select name="outFlight" required></select></label>
+          <label>Return <input type="date" name="return"></label>
+          <label>Return flight <select name="retFlight"></select></label>
+        </div>
+        <p class="hint">Fares follow the cabin and the flights chosen. Saving an existing booking keeps its code, which is how you simulate a change before a demo.</p>
+        <div class="actions">
+          <button class="primary" type="submit">Save booking</button>
+          <button class="ghost" type="button" id="cancel-booking">Cancel</button>
+        </div>
+        <p id="booking-form-status" class="status" role="status"></p>
+      </form>
+    </section>
+
+    <!-- Flight status overrides -->
+    <section class="admin-section" id="status" aria-labelledby="status-title">
+      <div class="section-head"><h2 id="status-title">Flight status</h2></div>
+      <p>Set the status the Flight status tab shows for a flight number, on every date. Flights without an override show generated demo data.</p>
+      <form id="status-form" class="card form-stack" novalidate>
+        <div class="grid">
+          <label>Flight number <input name="number" required placeholder="NW 123" autocomplete="off" list="booked-flights"></label>
+          <label>Status <select name="status" id="status-select"></select></label>
+          <label>Delay in minutes <input name="delay" type="number" min="0" max="1440" step="5" value="0"></label>
+          <label>Gate <input name="gate" maxlength="4" placeholder="e.g. B12 (optional)" autocomplete="off"></label>
+        </div>
+        <datalist id="booked-flights"></datalist>
+        <div class="actions"><button class="primary" type="submit">Save status</button></div>
+        <p id="status-form-status" class="status" role="status"></p>
+      </form>
+      <div class="table-wrap card flush">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Flight</th>
+              <th scope="col">Status</th>
+              <th scope="col">Delay</th>
+              <th scope="col">Gate</th>
+              <th scope="col"><span class="sr">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody id="status-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Reset -->
+    <section class="admin-section" id="reset" aria-labelledby="reset-title">
+      <div class="section-head"><h2 id="reset-title">Reset demo data</h2></div>
+      <div class="card">
+        <p>Removes every booking and flight status override in this browser and restores the sample booking <strong>DEMO01</strong> (Ana Rivera, Miami to New York, 10 days from today).</p>
+        <div class="actions"><button class="primary" type="button" id="reset-data">Reset demo data</button></div>
+        <p id="reset-status" class="status" role="status"></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Northwind Air is a fictional demo company. All flights, fares, and contact details are sample data.</p>
+    <p><a href="index.html">Back to site</a></p>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

@@ -5,111 +5,17 @@
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-  const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
 
-  /* ---------- Reference data (demo only) ---------- */
+  const D = window.NorthwindData;
+  const {
+    esc, money, AIRPORTS, CABIN_LABEL, CHANGE_FEE, cityOf,
+    today, addDays, prettyDate, fmtTime, dayOffset, fmtDur, flightsFor
+  } = D;
 
-  const AIRPORTS = [
-    ['MIA', 'Miami'], ['JFK', 'New York'], ['ORD', 'Chicago'], ['LAX', 'Los Angeles'],
-    ['SFO', 'San Francisco'], ['MEX', 'Mexico City'], ['LHR', 'London'], ['CDG', 'Paris'],
-    ['GRU', 'São Paulo']
-  ];
-  const CABIN_MULT = { Economy: 1, Premium: 1.6, Business: 3.2 };
-  const CABIN_LABEL = { Economy: 'Economy', Premium: 'Premium Economy', Business: 'Business' };
-  const CHANGE_FEE = { Economy: 75, Premium: 75, Business: 0 };
-  const cityOf = (code) => (AIRPORTS.find((a) => a[0] === code) || [code, code])[1];
+  /* ---------- Bookings and status overrides (this browser, shared with admin.html) ---------- */
 
-  /* ---------- Dates (local time, YYYY-MM-DD) ---------- */
-
-  const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  const today = () => toISO(new Date());
-  const parseISO = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-  const addDays = (s, n) => { const d = parseISO(s); d.setDate(d.getDate() + n); return toISO(d); };
-  const prettyDate = (s) => parseISO(s).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-
-  /* Times are minutes after midnight. Values past 1440 roll into the next day. */
-  const fmtTime = (min) => {
-    const m = ((min % 1440) + 1440) % 1440;
-    return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
-  };
-  const dayOffset = (min) => Math.floor(min / 1440);
-  const fmtDur = (min) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`;
-
-  /* ---------- Deterministic demo data ---------- */
-
-  function hash(s) {
-    let h = 2166136261;
-    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return h >>> 0;
-  }
-
-  function rng(a) {
-    return function () {
-      a |= 0; a = (a + 0x6D2B79F5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  /* The same route and date always return the same flights. */
-  function flightsFor(from, to, date) {
-    const r = rng(hash(`${from}>${to}|${date}`));
-    const base = 110 + Math.floor(r() * 200);
-    const slots = [400, 585, 760, 945, 1130, 1290]
-      .map((v) => [r(), v])
-      .sort((a, b) => a[0] - b[0])
-      .slice(0, 4)
-      .map((x) => x[1])
-      .sort((a, b) => a - b);
-
-    return slots.map((dep) => {
-      const dur = 180 + Math.round((r() * 360) / 5) * 5;
-      const econ = Math.round((base * (0.85 + r() * 0.5)) / 5) * 5;
-      return {
-        number: 'NW ' + (100 + Math.floor(r() * 899)),
-        dep,
-        arr: dep + dur,
-        dur,
-        stops: r() < 0.65 ? 0 : 1,
-        fares: Object.fromEntries(
-          Object.entries(CABIN_MULT).map(([k, m]) => [k, Math.round((econ * m) / 5) * 5])
-        )
-      };
-    });
-  }
-
-  /* ---------- Bookings (kept in memory for this page visit) ---------- */
-
-  const bookings = [];
-
-  function seedDemoBooking() {
-    const date = addDays(today(), 10);
-    const f = flightsFor('MIA', 'JFK', date)[1];
-    bookings.push({
-      pnr: 'DEMO01',
-      firstName: 'Ana',
-      lastName: 'Rivera',
-      email: 'ana@example.com',
-      cabin: 'Economy',
-      pax: 1,
-      legs: [{ from: 'MIA', to: 'JFK', date, flight: f, fare: f.fares.Economy }]
-    });
-  }
-  seedDemoBooking();
-
-  function newPnr() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code;
-    do {
-      code = '';
-      for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
-    } while (bookings.some((b) => b.pnr === code));
-    return code;
-  }
+  let state = D.load();
+  const saveState = () => D.save(state);
 
   /* ---------- Page elements ---------- */
 
@@ -323,8 +229,9 @@
   function onPassengerSubmit(form) {
     if (!form.checkValidity()) return form.reportValidity();
     const f = new FormData(form);
+    state = D.load();
     const booking = {
-      pnr: newPnr(),
+      pnr: D.newPnr(state.bookings),
       firstName: f.get('first').trim(),
       lastName: f.get('last').trim(),
       email: f.get('email').trim(),
@@ -332,7 +239,8 @@
       pax: draft.pax,
       legs: draft.legs.map((l) => ({ ...l }))
     };
-    bookings.push(booking);
+    state.bookings.push(booking);
+    saveState();
     draft = null;
     showConfirmation(booking);
   }
@@ -361,7 +269,8 @@
     const pnr = f.get('pnr').trim().toUpperCase();
     const last = f.get('last').trim().toLowerCase();
     setSiteTask('rebook');
-    const b = bookings.find((x) => x.pnr === pnr && x.lastName.toLowerCase() === last);
+    state = D.load();
+    const b = state.bookings.find((x) => x.pnr === pnr && x.lastName.toLowerCase() === last);
     if (!b) {
       return showError("We couldn't find a booking with that code and last name. Check both and try again. For the demo, use DEMO01 and Rivera.");
     }
@@ -373,7 +282,7 @@
     results.innerHTML = `
       ${notice ? `<p class="status ok" role="status">${esc(notice)}</p>` : ''}
       <div class="results-head">
-        <h2>Booking ${b.pnr}</h2>
+        <h2>Booking ${esc(b.pnr)}</h2>
         <p>${esc(b.firstName)} ${esc(b.lastName)}, ${b.pax} passenger${b.pax > 1 ? 's' : ''}, ${esc(CABIN_LABEL[b.cabin])}</p>
       </div>
       ${b.legs.map((l, i) => `
@@ -389,13 +298,17 @@
   function startChange(index) {
     const leg = activeBooking.legs[index];
     changeIdx = index;
+    // A round trip stays in order: the outbound can't move past the return, nor the return before the outbound.
+    const prev = activeBooking.legs[index - 1];
+    const next = activeBooking.legs[index + 1];
+    const minDate = prev && prev.date > today() ? prev.date : today();
     results.innerHTML = `
       <div class="results-head">
         <h2>Change flight</h2>
         <p>${esc(cityOf(leg.from))} to ${esc(cityOf(leg.to))}, currently ${prettyDate(leg.date)}</p>
       </div>
       <form id="change-form" class="card form-stack">
-        <label>New date <input type="date" name="date" required min="${today()}" value="${leg.date}"></label>
+        <label>New date <input type="date" name="date" required min="${minDate}"${next ? ` max="${next.date}"` : ''} value="${leg.date}"></label>
         <p class="hint">Economy and Premium changes cost $75 per person, plus any fare difference. Business changes have no change fee.</p>
         <div class="actions"><button class="primary" type="submit">Show flights</button></div>
       </form>
@@ -438,12 +351,32 @@
 
   function confirmChange(index) {
     const fl = changeFlights[index];
-    const leg = activeBooking.legs[changeIdx];
+    state = D.load();
+    const b = state.bookings.find((x) => x.pnr === activeBooking.pnr);
+    if (!b || !b.legs[changeIdx]) {
+      activeBooking = null;
+      return showError('This booking was changed or removed on the demo admin page. Look it up again.');
+    }
+    const leg = b.legs[changeIdx];
     leg.flight = fl;
     leg.date = changeDate;
-    leg.fare = fl.fares[activeBooking.cabin];
-    showItinerary(activeBooking, `Flight changed. Your confirmation code is still ${activeBooking.pnr}.`);
+    leg.fare = fl.fares[b.cabin];
+    saveState();
+    showItinerary(b, `Flight changed. Your confirmation code is still ${b.pnr}.`);
   }
+
+  /* An open tab follows changes made on the admin page in another tab. */
+  window.addEventListener('storage', (e) => {
+    if (e.key !== D.KEY) return;
+    state = D.load();
+    if (!activeBooking) return;
+    const b = state.bookings.find((x) => x.pnr === activeBooking.pnr);
+    if (b) showItinerary(b, 'This booking was updated on the demo admin page.');
+    else {
+      activeBooking = null;
+      results.innerHTML = '';
+    }
+  });
 
   /* ---------- Fares ---------- */
 
@@ -495,36 +428,31 @@
       </div>`;
   });
 
-  /* ---------- Flight status (demo data) ---------- */
+  /* ---------- Flight status (demo data, overridable on the admin page) ---------- */
 
   statusForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const f = new FormData(statusForm);
-    let num = f.get('number').trim().toUpperCase().replace(/\s+/g, ' ');
-    num = num.replace(/^([A-Z]{2})\s?(\d{1,4})$/, '$1 $2');
+    const num = D.normalizeFlight(f.get('number'));
     const date = f.get('date');
-    if (!/^[A-Z]{2} \d{1,4}$/.test(num)) return showError('Enter a flight number like NW 123.');
+    if (!num) return showError('Enter a flight number like NW 123.');
     setSiteTask('status');
 
-    const r = rng(hash(num + '|' + date));
-    const states = [['On time', 0], ['On time', 0], ['Delayed', 15], ['Delayed', 40], ['Boarding', 0], ['Departed', 0], ['Landed', 0]];
-    const [status, delay] = states[Math.floor(r() * states.length)];
-    const sched = 360 + Math.floor((r() * 960) / 5) * 5;
-    const from = AIRPORTS[Math.floor(r() * AIRPORTS.length)][0];
-    let to = from;
-    while (to === from) to = AIRPORTS[Math.floor(r() * AIRPORTS.length)][0];
-    const gate = String.fromCharCode(65 + Math.floor(r() * 6)) + (1 + Math.floor(r() * 30));
+    state = D.load();
+    const s = D.flightStatus(num, date, state.statusOverrides);
+    const cancelled = s.status === 'Cancelled';
 
     results.innerHTML = `
       <div class="results-head"><h2>Flight ${esc(num)}</h2><p>${prettyDate(date)}</p></div>
       <div class="card">
         <dl class="facts">
-          <dt>Status</dt><dd>${esc(status)}</dd>
-          <dt>Route</dt><dd>${esc(cityOf(from))} (${from}) to ${esc(cityOf(to))} (${to})</dd>
-          <dt>Scheduled departure</dt><dd>${fmtTime(sched)}</dd>
-          <dt>Estimated departure</dt><dd>${fmtTime(sched + delay)}</dd>
-          <dt>Gate</dt><dd>${gate}</dd>
+          <dt>Status</dt><dd>${esc(s.status)}</dd>
+          <dt>Route</dt><dd>${esc(cityOf(s.from))} (${s.from}) to ${esc(cityOf(s.to))} (${s.to})</dd>
+          <dt>Scheduled departure</dt><dd>${fmtTime(s.sched)}</dd>
+          <dt>Estimated departure</dt><dd>${cancelled ? 'Cancelled' : fmtTime(s.sched + s.delay)}</dd>
+          <dt>Gate</dt><dd>${cancelled ? 'None' : esc(s.gate)}</dd>
         </dl>
+        ${cancelled ? '<p>This flight is cancelled. Chat with us or call to change your booking.</p>' : ''}
         <p class="hint">Demo data. Live flight tracking is not connected to this site.</p>
       </div>`;
   });

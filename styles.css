@@ -343,6 +343,19 @@ tbody th { font-weight: 500; }
   border-top: 1px solid var(--rule);
 }
 
+/* Demo admin */
+.admin-section { padding: 1.5rem 0 2.5rem; }
+.section-head {
+  display: flex; flex-wrap: wrap; gap: 1rem;
+  align-items: center; justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.card.flush { padding: 0; }
+.card.flush td, .card.flush th { vertical-align: top; }
+.row-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+td.legs { white-space: normal; min-width: 260px; }
+td.legs span { display: block; }
+
 /* Responsive */
 @media (max-width: 760px) {
   .help-grid { grid-template-columns: 1fr; }
