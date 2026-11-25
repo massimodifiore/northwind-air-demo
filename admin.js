@@ -6,13 +6,32 @@
 
   const D = window.NorthwindData;
   const { esc, money, AIRPORTS, CABIN_LABEL, STATUSES, today, addDays, prettyDate, fmtTime, flightsFor } = D;
+  const SOURCE_LABEL = { seed: 'Sample', site: 'Website', admin: 'Admin', chat: 'Chat' };
 
-  let state = D.load();
-  const saveState = () => D.save(state);
+  let state = { bookings: [], statusOverrides: {} };
 
   function setStatus(el, text, kind) {
     el.textContent = text;
     el.className = 'status ' + (kind || '');
+  }
+
+  /* Runs one change against the booking API, then reloads everything. */
+  async function act(statusEl, fn, okText) {
+    try {
+      await fn();
+      await refresh();
+      if (okText) setStatus(statusEl, okText, 'ok');
+      return true;
+    } catch (e) {
+      setStatus(statusEl, `${e.message} Try again in a moment.`, 'error');
+      return false;
+    }
+  }
+
+  async function refresh() {
+    state = await D.load();
+    renderBookings();
+    renderStatuses();
   }
 
   /* ---------- Bookings table ---------- */
@@ -27,7 +46,7 @@
     }
     rows.innerHTML = state.bookings.map((b) => `
       <tr>
-        <th scope="row"><span class="pnr">${esc(b.pnr)}</span></th>
+        <th scope="row"><span class="pnr">${esc(b.pnr)}</span><br><span class="code">${esc(SOURCE_LABEL[b.source] || 'Website')}</span></th>
         <td>${esc(b.firstName)} ${esc(b.lastName)}<br><span class="code">${esc(b.email)}</span></td>
         <td class="legs">${b.legs.map((l) => `<span>${esc(l.flight.number)}: ${esc(l.from)} to ${esc(l.to)}, ${prettyDate(l.date)}, ${fmtTime(l.flight.dep)}</span>`).join('')}</td>
         <td>${esc(CABIN_LABEL[b.cabin])}</td>
@@ -48,20 +67,19 @@
     if (!b) return;
     if (btn.dataset.action === 'edit') return openForm(b);
     if (btn.dataset.action === 'delete' && window.confirm(`Delete booking ${b.pnr}?`)) {
-      state.bookings = state.bookings.filter((x) => x !== b);
-      saveState();
       if (editing === b.pnr) closeForm();
-      renderAll();
-      setStatus(bookingsStatus, `Booking ${b.pnr} deleted.`, 'ok');
+      act(bookingsStatus, () => D.deleteBooking(b.pnr), `Booking ${b.pnr} deleted.`);
     }
   });
+
+  $('#refresh').addEventListener('click', () => act(bookingsStatus, async () => {}, 'Reloaded.'));
 
   /* ---------- Booking form (create and edit) ---------- */
 
   const form = $('#booking-form');
   const formStatus = $('#booking-form-status');
   const el = form.elements;
-  let editing = null;       // code of the booking being edited, or null for a new one
+  let editing = null;       // the booking being edited, or null for a new one
   let outFlights = [];
   let retFlights = [];
 
@@ -102,7 +120,7 @@
   $$('input[name="trip"]', form).forEach((r) => r.addEventListener('change', () => refreshFlights()));
 
   function openForm(b) {
-    editing = b ? b.pnr : null;
+    editing = b || null;
     form.reset();
     setStatus(formStatus, '');
     $('#booking-form-title').textContent = b ? `Edit booking ${b.pnr}` : 'New booking';
@@ -146,43 +164,42 @@
   $('#new-booking').addEventListener('click', () => openForm(null));
   $('#cancel-booking').addEventListener('click', closeForm);
 
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!form.checkValidity()) return form.reportValidity();
     const rt = roundTrip();
     if (el.from.value === el.to.value) return setStatus(formStatus, 'Choose two different airports.', 'error');
     if (rt && el.return.value < el.depart.value) return setStatus(formStatus, 'The return date needs to be on or after the depart date.', 'error');
 
-    state = D.load();
-    const code = el.pnr.value.trim().toUpperCase();
-    if (!editing && code && state.bookings.some((b) => b.pnr === code)) {
-      return setStatus(formStatus, `Code ${code} is already used. Choose another, or leave it empty to generate one.`, 'error');
-    }
-
     const cabin = el.cabin.value;
     const leg = (from, to, date, flight) => ({ from, to, date, flight, fare: flight.fares[cabin] });
     const legs = [leg(el.from.value, el.to.value, el.depart.value, outFlights[el.outFlight.value])];
     if (rt) legs.push(leg(el.to.value, el.from.value, el.return.value, retFlights[el.retFlight.value]));
 
+    const code = el.pnr.value.trim().toUpperCase();
     const booking = {
-      pnr: editing || code || D.newPnr(state.bookings),
+      pnr: editing ? editing.pnr : code || D.newPnr(state.bookings),
       firstName: el.first.value.trim(),
       lastName: el.last.value.trim(),
       email: el.email.value.trim(),
       cabin,
       pax: Number(el.pax.value),
-      legs
+      legs,
+      source: editing ? editing.source : 'admin',
+      created: editing ? editing.created : undefined
     };
 
-    const i = state.bookings.findIndex((b) => b.pnr === booking.pnr);
-    if (i >= 0) state.bookings[i] = booking;
-    else state.bookings.push(booking);
-    saveState();
-
     const verb = editing ? 'updated' : 'created';
+    try {
+      await D.saveBooking(booking, !editing);
+    } catch (err) {
+      return setStatus(formStatus, err.status === 409
+        ? `Code ${booking.pnr} is already used. Choose another, or leave it empty to generate one.`
+        : `${err.message} Try again in a moment.`, 'error');
+    }
     closeForm();
-    renderAll();
-    setStatus(bookingsStatus, `Booking ${booking.pnr} ${verb} for ${booking.firstName} ${booking.lastName}. On the site, use Rebook with code ${booking.pnr} and last name ${booking.lastName}.`, 'ok');
+    await act(bookingsStatus, async () => {},
+      `Booking ${booking.pnr} ${verb} for ${booking.firstName} ${booking.lastName}. On the site, use Rebook with code ${booking.pnr} and last name ${booking.lastName}.`);
   });
 
   /* ---------- Flight status overrides ---------- */
@@ -209,59 +226,37 @@
     $('#booked-flights').innerHTML = booked.map((n) => `<option value="${esc(n)}"></option>`).join('');
   }
 
-  statusForm.addEventListener('submit', (e) => {
+  statusForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!statusForm.checkValidity()) return statusForm.reportValidity();
     const f = new FormData(statusForm);
     const num = D.normalizeFlight(f.get('number'));
     if (!num) return setStatus(statusFormStatus, 'Enter a flight number like NW 123.', 'error');
     const status = f.get('status');
-    state = D.load();
-    state.statusOverrides[num] = {
-      status,
-      delay: status === 'Delayed' ? Number(f.get('delay')) || 0 : 0,
-      gate: f.get('gate').trim().toUpperCase()
-    };
-    saveState();
-    renderStatuses();
-    statusForm.reset();
-    setStatus(statusFormStatus, `${num} now shows ${status} on the Flight status tab.`, 'ok');
+    const saved = await act(statusFormStatus,
+      () => D.saveStatus(num, { status, delay: Number(f.get('delay')) || 0, gate: f.get('gate').trim() }),
+      `${num} now shows ${status} on the Flight status tab.`);
+    if (saved) statusForm.reset();
   });
 
   statusRows.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
-    state = D.load();
-    delete state.statusOverrides[btn.dataset.num];
-    saveState();
-    renderStatuses();
-    setStatus(statusFormStatus, `${btn.dataset.num} is back to generated demo data.`, 'ok');
+    const num = btn.dataset.num;
+    act(statusFormStatus, () => D.removeStatus(num), `${num} is back to generated demo data.`);
   });
 
   /* ---------- Reset ---------- */
 
-  $('#reset-data').addEventListener('click', () => {
-    if (!window.confirm('Reset all demo data in this browser? Every booking and status override is removed and DEMO01 is restored.')) return;
-    state = D.reset();
+  $('#reset-data').addEventListener('click', async () => {
+    if (!window.confirm('Reset all demo data? Every booking, including bookings made in the chat, and every status override is removed, and DEMO01 is restored.')) return;
     closeForm();
-    renderAll();
     setStatus(bookingsStatus, '');
     setStatus(statusFormStatus, '');
-    setStatus($('#reset-status'), 'Demo data reset. Only DEMO01 remains.', 'ok');
+    await act($('#reset-status'), () => D.reset(), 'Demo data reset. Only DEMO01 remains.');
   });
 
-  /* ---------- Start, and follow changes made by the site in another tab ---------- */
+  /* ---------- Start ---------- */
 
-  function renderAll() {
-    renderBookings();
-    renderStatuses();
-  }
-
-  window.addEventListener('storage', (e) => {
-    if (e.key !== D.KEY) return;
-    state = D.load();
-    renderAll();
-  });
-
-  renderAll();
+  refresh().catch((e) => setStatus(bookingsStatus, `${e.message} Reload the page to try again.`, 'error'));
 })();

@@ -12,10 +12,9 @@
     today, addDays, prettyDate, fmtTime, dayOffset, fmtDur, flightsFor
   } = D;
 
-  /* ---------- Bookings and status overrides (this browser, shared with admin.html) ---------- */
+  /* ---------- Bookings and status overrides live in the booking API, shared with admin.html and the chat ---------- */
 
-  let state = D.load();
-  const saveState = () => D.save(state);
+  const unavailable = (e) => showError(`${e.message} Please try again in a moment.`);
 
   /* ---------- Page elements ---------- */
 
@@ -226,21 +225,35 @@
     results.scrollIntoView({ block: 'start' });
   }
 
-  function onPassengerSubmit(form) {
+  async function onPassengerSubmit(form) {
     if (!form.checkValidity()) return form.reportValidity();
     const f = new FormData(form);
-    state = D.load();
     const booking = {
-      pnr: D.newPnr(state.bookings),
+      pnr: '',
       firstName: f.get('first').trim(),
       lastName: f.get('last').trim(),
       email: f.get('email').trim(),
       cabin: draft.cabin,
       pax: draft.pax,
-      legs: draft.legs.map((l) => ({ ...l }))
+      legs: draft.legs.map((l) => ({ ...l })),
+      source: 'site'
     };
-    state.bookings.push(booking);
-    saveState();
+    form.querySelector('button[type="submit"]').disabled = true;
+    try {
+      const { bookings } = await D.load();
+      for (let attempt = 0; ; attempt++) {
+        booking.pnr = D.newPnr(bookings);
+        try {
+          await D.saveBooking(booking, true);
+          break;
+        } catch (e) {
+          if (e.status !== 409 || attempt >= 2) throw e;
+        }
+      }
+    } catch (e) {
+      form.querySelector('button[type="submit"]').disabled = false;
+      return unavailable(e);
+    }
     draft = null;
     showConfirmation(booking);
   }
@@ -263,14 +276,15 @@
 
   /* ---------- Rebooking ---------- */
 
-  rebookForm.addEventListener('submit', (e) => {
+  rebookForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = new FormData(rebookForm);
     const pnr = f.get('pnr').trim().toUpperCase();
     const last = f.get('last').trim().toLowerCase();
     setSiteTask('rebook');
-    state = D.load();
-    const b = state.bookings.find((x) => x.pnr === pnr && x.lastName.toLowerCase() === last);
+    let bookings;
+    try { ({ bookings } = await D.load()); } catch (err) { return unavailable(err); }
+    const b = bookings.find((x) => x.pnr === pnr && x.lastName.toLowerCase() === last);
     if (!b) {
       return showError("We couldn't find a booking with that code and last name. Check both and try again. For the demo, use DEMO01 and Rivera.");
     }
@@ -349,34 +363,25 @@
       </div>`;
   }
 
-  function confirmChange(index) {
+  async function confirmChange(index) {
     const fl = changeFlights[index];
-    state = D.load();
-    const b = state.bookings.find((x) => x.pnr === activeBooking.pnr);
-    if (!b || !b.legs[changeIdx]) {
-      activeBooking = null;
-      return showError('This booking was changed or removed on the demo admin page. Look it up again.');
+    let b;
+    try {
+      b = (await D.load()).bookings.find((x) => x.pnr === activeBooking.pnr);
+      if (!b || !b.legs[changeIdx]) {
+        activeBooking = null;
+        return showError('This booking was changed or removed on the demo admin page. Look it up again.');
+      }
+      const leg = b.legs[changeIdx];
+      leg.flight = fl;
+      leg.date = changeDate;
+      leg.fare = fl.fares[b.cabin];
+      await D.saveBooking(b, false);
+    } catch (e) {
+      return unavailable(e);
     }
-    const leg = b.legs[changeIdx];
-    leg.flight = fl;
-    leg.date = changeDate;
-    leg.fare = fl.fares[b.cabin];
-    saveState();
     showItinerary(b, `Flight changed. Your confirmation code is still ${b.pnr}.`);
   }
-
-  /* An open tab follows changes made on the admin page in another tab. */
-  window.addEventListener('storage', (e) => {
-    if (e.key !== D.KEY) return;
-    state = D.load();
-    if (!activeBooking) return;
-    const b = state.bookings.find((x) => x.pnr === activeBooking.pnr);
-    if (b) showItinerary(b, 'This booking was updated on the demo admin page.');
-    else {
-      activeBooking = null;
-      results.innerHTML = '';
-    }
-  });
 
   /* ---------- Fares ---------- */
 
@@ -430,7 +435,7 @@
 
   /* ---------- Flight status (demo data, overridable on the admin page) ---------- */
 
-  statusForm.addEventListener('submit', (e) => {
+  statusForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = new FormData(statusForm);
     const num = D.normalizeFlight(f.get('number'));
@@ -438,8 +443,9 @@
     if (!num) return showError('Enter a flight number like NW 123.');
     setSiteTask('status');
 
-    state = D.load();
-    const s = D.flightStatus(num, date, state.statusOverrides);
+    let overrides;
+    try { ({ statusOverrides: overrides } = await D.load()); } catch (err) { return unavailable(err); }
+    const s = D.flightStatus(num, date, overrides);
     const cancelled = s.status === 'Cancelled';
 
     results.innerHTML = `

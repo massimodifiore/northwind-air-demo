@@ -1,5 +1,5 @@
-/* Shared by the site (app.js) and the demo admin page (admin.js). */
-window.NorthwindData = (() => {
+/* Shared by the site (app.js), the demo admin page (admin.js) and the booking API (api/worker.js). */
+globalThis.NorthwindData = (() => {
   'use strict';
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
@@ -97,9 +97,41 @@ window.NorthwindData = (() => {
     return /^[A-Z]{2} \d{1,4}$/.test(num) ? num : null;
   }
 
-  /* ---------- Store (this browser only) ---------- */
+  /* ---------- Shared store: the booking API (api/worker.js), also used by the chat assistant ---------- */
 
-  const KEY = 'northwind-demo-v1';
+  const DEFAULT_API = 'https://northwind-air-api.massimodifiore.workers.dev';
+  // "?api=http://localhost:8787" points a local test at `wrangler dev`.
+  const API = (() => {
+    try {
+      const q = new URLSearchParams(globalThis.location.search).get('api');
+      if (q && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(q)) return q;
+    } catch (e) { /* not in a browser */ }
+    return DEFAULT_API;
+  })();
+
+  async function api(path, method = 'GET', body) {
+    let res;
+    try {
+      res = await fetch(API + path, {
+        method,
+        headers: body ? { 'content-type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined
+      });
+    } catch (e) {
+      throw Object.assign(new Error('The booking service could not be reached.'), { status: 0 });
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(data.error || `Booking service error ${res.status}.`), { status: res.status });
+    return data;
+  }
+
+  const load = () => api('/api/state');
+  /* create: refuse with status 409 when the code is already taken. */
+  const saveBooking = (b, create) => api(`/api/bookings/${encodeURIComponent(b.pnr)}${create ? '?create=1' : ''}`, 'PUT', b);
+  const deleteBooking = (pnr) => api(`/api/bookings/${encodeURIComponent(pnr)}`, 'DELETE');
+  const saveStatus = (num, o) => api(`/api/status/${encodeURIComponent(num)}`, 'PUT', o);
+  const removeStatus = (num) => api(`/api/status/${encodeURIComponent(num)}`, 'DELETE');
+  const reset = () => api('/api/reset', 'POST');
 
   function seed() {
     const date = addDays(today(), 10);
@@ -117,21 +149,6 @@ window.NorthwindData = (() => {
       statusOverrides: {}
     };
   }
-
-  function load() {
-    try {
-      const s = JSON.parse(localStorage.getItem(KEY));
-      if (s && Array.isArray(s.bookings) && s.statusOverrides && typeof s.statusOverrides === 'object') return s;
-    } catch (e) { /* unreadable: fall back to the seed */ }
-    return save(seed());
-  }
-
-  function save(state) {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* storage blocked: keep in memory */ }
-    return state;
-  }
-
-  const reset = () => save(seed());
 
   /* An override from the admin page wins over the generated status, on every date. */
   function flightStatus(number, date, overrides) {
@@ -156,10 +173,10 @@ window.NorthwindData = (() => {
   }
 
   return {
-    KEY, esc, money,
+    API, esc, money,
     AIRPORTS, CABIN_MULT, CABIN_LABEL, CHANGE_FEE, STATUSES, cityOf,
     today, addDays, prettyDate, fmtTime, dayOffset, fmtDur,
-    hash, rng, flightsFor, newPnr, normalizeFlight,
-    load, save, reset, flightStatus
+    hash, rng, flightsFor, newPnr, normalizeFlight, seed,
+    load, saveBooking, deleteBooking, saveStatus, removeStatus, reset, flightStatus
   };
 })();

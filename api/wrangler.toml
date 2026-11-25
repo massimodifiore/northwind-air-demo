@@ -1,0 +1,9 @@
+name = "northwind-air-api"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+# Bookings and flight status overrides, shared by the website and the Genesys Cloud data actions.
+[[kv_namespaces]]
+binding = "BOOKINGS"
+id = "18698513ae994da3827fa23ded83f3a4"

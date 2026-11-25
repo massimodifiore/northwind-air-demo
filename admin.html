@@ -13,7 +13,7 @@
 <body>
   <a class="skip" href="#main">Skip to content</a>
 
-  <div class="demo-bar">Demo admin. Changes apply to this browser only and are not visible to the chat assistant or agents.</div>
+  <div class="demo-bar">Demo admin. Bookings are shared sample data: the website, this page and the chat assistant all use the same store.</div>
 
   <header class="site-header">
     <a class="brand" href="index.html">Northwind Air</a>
@@ -35,8 +35,12 @@
     <section class="admin-section" id="bookings" aria-labelledby="bookings-title">
       <div class="section-head">
         <h2 id="bookings-title">Bookings</h2>
-        <button class="primary small" type="button" id="new-booking">New booking</button>
+        <div class="row-actions">
+          <button class="ghost small" type="button" id="refresh">Refresh</button>
+          <button class="primary small" type="button" id="new-booking">New booking</button>
+        </div>
       </div>
+      <p class="hint">Bookings made in the chat appear here with the source Chat. One made a moment ago can take up to a minute to show; use Refresh.</p>
       <p id="bookings-status" class="status" role="status"></p>
       <div class="table-wrap card flush">
         <table>
@@ -132,7 +136,7 @@
     <section class="admin-section" id="reset" aria-labelledby="reset-title">
       <div class="section-head"><h2 id="reset-title">Reset demo data</h2></div>
       <div class="card">
-        <p>Removes every booking and flight status override in this browser and restores the sample booking <strong>DEMO01</strong> (Ana Rivera, Miami to New York, 10 days from today).</p>
+        <p>Removes every booking, including bookings made in the chat, and every flight status override, then restores the sample booking <strong>DEMO01</strong> (Ana Rivera, Miami to New York, 10 days from today).</p>
         <div class="actions"><button class="primary" type="button" id="reset-data">Reset demo data</button></div>
         <p id="reset-status" class="status" role="status"></p>
       </div>
