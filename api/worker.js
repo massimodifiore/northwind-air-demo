@@ -275,14 +275,14 @@ function callbackTime(when) {
 
 let gcToken = null;
 
-async function gcAccessToken(env) {
+async function gcAccessToken(env, failMessage) {
   if (gcToken && gcToken.expires > Date.now() + 60000) return gcToken.value;
   const r = await fetch(`https://login.${env.GC_ENV}/oauth/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: 'Basic ' + btoa(`${env.GC_CLIENT_ID}:${env.GC_CLIENT_SECRET}`) },
     body: 'grant_type=client_credentials'
   });
-  if (!r.ok) { console.log('gc token failed', r.status); throw new HttpError(502, 'We could not schedule the callback. Please call us instead.'); }
+  if (!r.ok) { console.log('gc token failed', r.status); throw new HttpError(502, failMessage); }
   const t = await r.json();
   gcToken = { value: t.access_token, expires: Date.now() + t.expires_in * 1000 };
   return gcToken.value;
@@ -313,7 +313,7 @@ async function requestCallback(req, env, o) {
   if (code) data.booking_code = code;
   const r = await fetch(`https://api.${env.GC_ENV}/api/v2/conversations/callbacks`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + await gcAccessToken(env) },
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + await gcAccessToken(env, 'We could not schedule the callback. Please call us instead.') },
     body: JSON.stringify({
       routingData: { queueId: env.GC_QUEUE_ID },
       callbackNumbers: [phone],
@@ -336,6 +336,57 @@ async function requestCallback(req, env, o) {
     scheduled_for_utc: at ? new Date(at).toISOString() : null,
     scheduled_for_local: at ? nyLabel(at) : 'as soon as possible'
   };
+}
+
+/* ---------- Website messages: third-party Genesys Cloud emails on the Airline queue ---------- */
+
+const TOPICS = ['Booking', 'Fares', 'Changing a booking', 'Flight status', 'Refund', 'Other'];
+
+async function sendMessage(req, env, o) {
+  if (!ORIGINS.includes(req.headers.get('origin'))) throw new HttpError(403, 'Messages can be sent only from the Northwind Air website.');
+  const name = String(o.name || '').trim();
+  if (!name || name.length > 60) throw new HttpError(400, 'Name is required, up to 60 characters.');
+  const email = String(o.email || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 80) throw new HttpError(400, 'Enter a valid email address.');
+  const topic = String(o.topic || 'Other');
+  if (!TOPICS.includes(topic)) throw new HttpError(400, 'Unknown topic.');
+  const code = String(o.booking_code || '').replace(/\s+/g, '').toUpperCase();
+  if (code && !/^[A-Z0-9]{6}$/.test(code)) throw new HttpError(400, 'A booking code has 6 letters or digits, such as DEMO01.');
+  const message = String(o.message || '').trim();
+  if (message.length < 10 || message.length > 2000) throw new HttpError(400, 'The message must be 10 to 2000 characters.');
+  if (!env.GC_CLIENT_ID || !env.GC_CLIENT_SECRET) throw new HttpError(503, 'Messages are not set up yet. Please call or chat with us instead.');
+
+  const ip = req.headers.get('cf-connecting-ip') || 'unknown';
+  const ipKey = `em:ip:${ip}`;
+  const addrKey = `em:addr:${email}`;
+  const ipCount = Number(await env.BOOKINGS.get(ipKey)) || 0;
+  const addrCount = Number(await env.BOOKINGS.get(addrKey)) || 0;
+  if (ipCount >= 3) throw new HttpError(429, 'Too many messages from this device. Try again in an hour or chat with us.');
+  if (addrCount >= 2) throw new HttpError(429, 'We already have two messages from this address in the last hour. A specialist will reply.');
+  await env.BOOKINGS.put(ipKey, String(ipCount + 1), { expirationTtl: 3600 });
+
+  const fail = 'We could not send your message. Please call or chat with us instead.';
+  const r = await fetch(`https://api.${env.GC_ENV}/api/v2/conversations/emails`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + await gcAccessToken(env, fail) },
+    body: JSON.stringify({
+      queueId: env.GC_QUEUE_ID,
+      provider: 'Northwind Air Website',
+      direction: 'INBOUND',
+      fromName: name,
+      fromAddress: email,
+      subject: `${topic}${code ? ` (booking ${code})` : ''}: website message from ${name}`,
+      textBody: `${message}\n\nName: ${name}\nEmail: ${email}\nTopic: ${topic}\nBooking code: ${code || 'not given'}\nSent from the Northwind Air website contact form.`,
+      attributes: { email_source: 'website', email_topic: topic, ...(code ? { booking_code: code } : {}) }
+    })
+  });
+  if (!r.ok) {
+    console.log('gc email failed', r.status, (await r.text()).slice(0, 300));
+    throw new HttpError(502, fail);
+  }
+  const conv = await r.json();
+  await env.BOOKINGS.put(addrKey, String(addrCount + 1), { expirationTtl: 3600 });
+  return { reference: 'EM-' + String(conv.id || '').replace(/-/g, '').slice(-6).toUpperCase() };
 }
 
 /* ---------- Router ---------- */
@@ -361,6 +412,7 @@ async function route(req, env) {
   if (m === 'GET' && p === '/api/state') return json(req, view(await load(env)));
   if (m === 'POST' && p === '/api/reset') return json(req, view(await save(env, seeded())));
   if (m === 'POST' && p === '/api/callbacks') return json(req, await requestCallback(req, env, await body(req)), 201);
+  if (m === 'POST' && p === '/api/messages') return json(req, await sendMessage(req, env, await body(req)), 201);
 
   let hit = p.match(/^\/api\/bookings\/([A-Za-z0-9]{1,12})$/);
   if (hit) {

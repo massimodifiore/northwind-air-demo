@@ -499,17 +499,34 @@
     }
   });
 
-  /* ---------- Contact forms (demo only, nothing is sent) ---------- */
+  /* ---------- Contact forms ---------- */
 
+  /* Messages: the Worker creates a Genesys Cloud email on the contact center queue. */
   const emailForm = $('#email-form');
-  emailForm.addEventListener('submit', (e) => {
+  emailForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!emailForm.checkValidity()) return emailForm.reportValidity();
-    const name = new FormData(emailForm).get('name').trim();
-    const ref = 'CS-' + (10000 + Math.floor(Math.random() * 90000));
-    setStatus($('#email-status'),
-      `Thanks, ${name}. Your reference is ${ref}. A specialist replies within one business day. (Demo: nothing was sent.)`, 'ok');
-    emailForm.reset();
+    const f = new FormData(emailForm);
+    const name = f.get('name').trim();
+    const status = $('#email-status');
+    const button = $('button[type="submit"]', emailForm);
+    button.disabled = true;
+    setStatus(status, 'Sending your message...');
+    try {
+      const r = await D.sendMessage({
+        name,
+        email: f.get('email').trim(),
+        topic: f.get('topic'),
+        booking_code: f.get('pnr').trim() || undefined,
+        message: f.get('message').trim()
+      });
+      setStatus(status, `Thanks, ${name}. Your message was sent with reference ${r.reference}. A Northwind Air specialist will reply by email.`, 'ok');
+      emailForm.reset();
+    } catch (err) {
+      setStatus(status, err.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
   });
 
   /* Callbacks: the Worker creates a Genesys Cloud callback on the contact center queue.
@@ -616,7 +633,7 @@
   const showChatUnavailable = () => {
     chatButton.disabled = false;
     chatButton.textContent = chatLabel;
-    showError('Chat is not available right now. Please try again in a moment, or call +1 (800) 555-0142.');
+    showError('Chat is not available right now. Please try again in a moment, or call +1 (305) 440-5385.');
     document.getElementById('help').scrollIntoView({ behavior: 'smooth' });
   };
 

@@ -133,6 +133,7 @@ globalThis.NorthwindData = (() => {
   const removeStatus = (num) => api(`/api/status/${encodeURIComponent(num)}`, 'DELETE');
   const reset = () => api('/api/reset', 'POST');
   const requestCallback = (o) => api('/api/callbacks', 'POST', o);
+  const sendMessage = (o) => api('/api/messages', 'POST', o);
 
   function seed() {
     const date = addDays(today(), 10);
@@ -178,6 +179,6 @@ globalThis.NorthwindData = (() => {
     AIRPORTS, CABIN_MULT, CABIN_LABEL, CHANGE_FEE, STATUSES, cityOf,
     today, addDays, prettyDate, fmtTime, dayOffset, fmtDur,
     hash, rng, flightsFor, newPnr, normalizeFlight, seed,
-    load, saveBooking, deleteBooking, saveStatus, removeStatus, reset, requestCallback, flightStatus
+    load, saveBooking, deleteBooking, saveStatus, removeStatus, reset, requestCallback, sendMessage, flightStatus
   };
 })();
