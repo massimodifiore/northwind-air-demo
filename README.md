@@ -36,6 +36,21 @@ Endpoints for the website and admin page (no key; demo data only):
 | `DELETE /api/bookings/{code}` | Delete a booking |
 | `PUT /api/status/{flight}`, `DELETE /api/status/{flight}` | Set or remove a flight status override |
 | `POST /api/reset` | Remove everything and restore `DEMO01` |
+| `POST /api/callbacks` | Create a real Genesys Cloud callback (see below); returns `reference`, `phone` and the scheduled time |
+
+### Callbacks
+
+`POST /api/callbacks` takes `name`, `phone`, `when` (`asap` or a New York time such as `2026-12-01T10:30`), and optionally `reason` (`new_booking`, `change_trip`, `flight_status` or `other`) and `booking_code`. Times must be on the hour or half hour, 6:00 am to 10:30 pm New York time, within the next 7 days. An ASAP request outside those hours is scheduled for the next 6:00 am. The Worker accepts requests only from the origins in `ORIGINS`, allows 3 requests per IP and 1 per phone number per hour, and returns 403, 400, 429 or 502 with a message the form shows as it is.
+
+The callback is created with `POST /api/v2/conversations/callbacks` on the queue `GC_QUEUE_ID` (in `api/wrangler.toml`, with the region `GC_ENV`), signed in with a client-credentials OAuth client that holds only `conversation:callback:create`. Its id and secret are Worker secrets:
+
+```bash
+cd api
+npx wrangler secret put GC_CLIENT_ID
+npx wrangler secret put GC_CLIENT_SECRET
+```
+
+To rotate the secret, regenerate it on the OAuth client's page in Genesys Cloud and run `npx wrangler secret put GC_CLIENT_SECRET` again. Until both secrets are set, the endpoint answers 503. The callback carries participant data `callback_source` (`website`), `callback_reason` and `booking_code`, which the agent sees.
 
 Endpoints for the chat assistant's Genesys Cloud data actions (header `x-api-key` required):
 
@@ -72,7 +87,7 @@ To deploy: `npx wrangler kv namespace create BOOKINGS`, put the id in `api/wrang
 - **Fares:** see the lowest fares for the seven days around a chosen date. Click **Book this date** to jump to booking.
 - **Rebook:** enter code `DEMO01` and last name `Rivera` to load a sample booking, or any code created with the Book tab, the admin page or the chat assistant.
 - **Flight status:** enter a flight number such as `NW 123` and a date. Results are generated sample data unless the admin page overrides that flight.
-- **Contact us:** shows a click-to-call number, a callback request form, and a message form.
+- **Contact us:** shows a click-to-call number, a callback request form, and a message form. The callback form creates a real callback in Genesys Cloud, ASAP or at a chosen New York time, and a specialist on the queue calls the number given. The message form still sends nothing.
 - **Chat:** the bottom-right button opens Genesys Cloud Web Messenger (deployment `LaunchPad-Airline`). The last tool used on the site is sent to the chat as `site_last_task`.
 
 ## Demo admin page

@@ -217,6 +217,127 @@ function keyOk(req, env) {
   return diff === 0;
 }
 
+/* ---------- Callbacks: Genesys Cloud ACD callbacks on the Airline queue ----------
+   Open hours match the Airline-General-Inquiry-Hours schedule: every day 06:00-23:00 New York time. */
+
+const TZ = 'America/New_York';
+const OPEN_HOUR = 6;
+const CLOSE_HOUR = 23;
+const REASONS = ['new_booking', 'change_trip', 'flight_status', 'other'];
+
+function nyParts(ms) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+  }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return { y: +p.year, mo: +p.month, d: +p.day, h: +p.hour, mi: +p.minute };
+}
+
+function nyToUtc(y, mo, d, h, mi) {
+  const wall = Date.UTC(y, mo - 1, d, h, mi);
+  const offset = (ms) => { const p = nyParts(ms); return Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi) - Math.floor(ms / 60000) * 60000; };
+  const first = wall - offset(wall);
+  return wall - offset(first);
+}
+
+const nyLabel = (ms) => new Intl.DateTimeFormat('en-US', {
+  timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+}).format(new Date(ms)) + ' New York time';
+
+function phoneE164(value) {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/[\s().-]/g, '');
+  if (/^\+\d{8,15}$/.test(digits)) return digits;
+  if (/^\d{10}$/.test(digits)) return '+1' + digits;
+  if (/^1\d{10}$/.test(digits)) return '+' + digits;
+  throw new HttpError(400, 'Enter a phone number with its area code, such as 305 555 0123, or in international format, such as +44 20 7946 0000.');
+}
+
+/* Returns the UTC time to schedule, or null to call as soon as possible. */
+function callbackTime(when) {
+  const now = Date.now();
+  if (String(when || 'asap') === 'asap') {
+    const n = nyParts(now);
+    if (n.h >= OPEN_HOUR && n.h < CLOSE_HOUR) return null;
+    const t = new Date(Date.UTC(n.y, n.mo - 1, n.d + (n.h >= CLOSE_HOUR ? 1 : 0)));
+    return nyToUtc(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate(), OPEN_HOUR, 0);
+  }
+  const m = String(when).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!m) throw new HttpError(400, 'when must be asap or a New York time like 2026-12-01T10:30.');
+  const [y, mo, d, h, mi] = m.slice(1).map(Number);
+  if (h < OPEN_HOUR || h >= CLOSE_HOUR || (mi !== 0 && mi !== 30)) {
+    throw new HttpError(400, 'Choose a time on the hour or half hour between 6:00 am and 10:30 pm New York time.');
+  }
+  const t = nyToUtc(y, mo, d, h, mi);
+  if (t <= now) throw new HttpError(400, 'That time has already passed. Choose a later time.');
+  if (t > now + 7 * 86400000) throw new HttpError(400, 'Choose a time within the next 7 days.');
+  return t;
+}
+
+let gcToken = null;
+
+async function gcAccessToken(env) {
+  if (gcToken && gcToken.expires > Date.now() + 60000) return gcToken.value;
+  const r = await fetch(`https://login.${env.GC_ENV}/oauth/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: 'Basic ' + btoa(`${env.GC_CLIENT_ID}:${env.GC_CLIENT_SECRET}`) },
+    body: 'grant_type=client_credentials'
+  });
+  if (!r.ok) { console.log('gc token failed', r.status); throw new HttpError(502, 'We could not schedule the callback. Please call us instead.'); }
+  const t = await r.json();
+  gcToken = { value: t.access_token, expires: Date.now() + t.expires_in * 1000 };
+  return gcToken.value;
+}
+
+async function requestCallback(req, env, o) {
+  if (!ORIGINS.includes(req.headers.get('origin'))) throw new HttpError(403, 'Callbacks can be requested only from the Northwind Air website.');
+  const caller = String(o.name || '').trim();
+  if (!caller || caller.length > 60) throw new HttpError(400, 'Name is required, up to 60 characters.');
+  const phone = phoneE164(o.phone);
+  const reason = o.reason ? String(o.reason) : '';
+  if (reason && !REASONS.includes(reason)) throw new HttpError(400, 'Unknown reason.');
+  const code = String(o.booking_code || '').trim().toUpperCase();
+  if (code && !/^[A-Z0-9]{6}$/.test(code)) throw new HttpError(400, 'A booking code has 6 letters or digits, such as DEMO01.');
+  const at = callbackTime(o.when);
+  if (!env.GC_CLIENT_ID || !env.GC_CLIENT_SECRET) throw new HttpError(503, 'Callbacks are not set up yet. Please call us instead.');
+
+  const ip = req.headers.get('cf-connecting-ip') || 'unknown';
+  const ipKey = `cb:ip:${ip}`;
+  const phoneKey = `cb:phone:${phone}`;
+  const ipCount = Number(await env.BOOKINGS.get(ipKey)) || 0;
+  if (ipCount >= 3) throw new HttpError(429, 'Too many callback requests from this device. Try again in an hour or call us.');
+  if (await env.BOOKINGS.get(phoneKey)) throw new HttpError(429, 'A callback to this number was requested in the last hour. We will call you.');
+  await env.BOOKINGS.put(ipKey, String(ipCount + 1), { expirationTtl: 3600 });
+
+  const data = { callback_source: 'website' };
+  if (reason) data.callback_reason = reason;
+  if (code) data.booking_code = code;
+  const r = await fetch(`https://api.${env.GC_ENV}/api/v2/conversations/callbacks`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + await gcAccessToken(env) },
+    body: JSON.stringify({
+      routingData: { queueId: env.GC_QUEUE_ID },
+      callbackNumbers: [phone],
+      callbackUserName: caller,
+      ...(at ? { callbackScheduledTime: new Date(at).toISOString() } : {}),
+      countryCode: 'US',
+      validateCallbackNumbers: true,
+      data
+    })
+  });
+  if (!r.ok) {
+    console.log('gc callback failed', r.status, (await r.text()).slice(0, 300));
+    throw new HttpError(502, 'We could not schedule the callback. Please call us instead.');
+  }
+  const conv = (await r.json()).conversation || {};
+  await env.BOOKINGS.put(phoneKey, '1', { expirationTtl: 3600 });
+  return {
+    reference: 'CB-' + String(conv.id || '').replace(/-/g, '').slice(-6).toUpperCase(),
+    phone,
+    scheduled_for_utc: at ? new Date(at).toISOString() : null,
+    scheduled_for_local: at ? nyLabel(at) : 'as soon as possible'
+  };
+}
+
 /* ---------- Router ---------- */
 
 async function route(req, env) {
@@ -239,6 +360,7 @@ async function route(req, env) {
 
   if (m === 'GET' && p === '/api/state') return json(req, view(await load(env)));
   if (m === 'POST' && p === '/api/reset') return json(req, view(await save(env, seeded())));
+  if (m === 'POST' && p === '/api/callbacks') return json(req, await requestCallback(req, env, await body(req)), 201);
 
   let hit = p.match(/^\/api\/bookings\/([A-Za-z0-9]{1,12})$/);
   if (hit) {

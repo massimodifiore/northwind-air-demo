@@ -3,6 +3,12 @@ main = "worker.js"
 compatibility_date = "2026-11-01"
 workers_dev = true
 
+# Callbacks (POST /api/callbacks). Secrets GC_CLIENT_ID and GC_CLIENT_SECRET belong to OAuth client
+# Airline-Website-Callback-Client; set them with `npx wrangler secret put`.
+[vars]
+GC_ENV = "usw2.pure.cloud"
+GC_QUEUE_ID = "b820162b-4306-4138-a68a-5353db9b01a5"
+
 # Bookings and flight status overrides, shared by the website and the Genesys Cloud data actions.
 [[kv_namespaces]]
 binding = "BOOKINGS"

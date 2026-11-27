@@ -274,6 +274,10 @@ button.small { min-height: 38px; padding: 0.5rem 0.9rem; }
 
 .form-stack { display: grid; gap: 1rem; }
 .form-stack .actions { margin-top: 0; }
+.form-stack fieldset { margin: 0; }
+.form-stack .hint { margin: 0; }
+.callback-time { margin-bottom: 0; }
+.callback-time[hidden] { display: none; }
 
 .total { font-size: 1.1rem; margin-top: 0.75rem; }
 

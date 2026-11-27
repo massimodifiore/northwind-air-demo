@@ -13,7 +13,7 @@
 <body>
   <a class="skip" href="#main">Skip to content</a>
 
-  <div class="demo-bar">Demo site. No real bookings, payments, or emails are sent. Bookings are shared sample data visible to anyone using this demo.</div>
+  <div class="demo-bar">Demo site. No real bookings, payments, or emails are sent. Bookings are shared sample data visible to anyone using this demo. Callback requests are real: a specialist calls the number you give.</div>
 
   <header class="site-header">
     <a class="brand" href="#top">Northwind Air</a>
@@ -118,7 +118,7 @@
         <article class="card">
           <h3>Call the contact center</h3>
           <p class="big"><a href="tel:+18005550142">+1 (800) 555-0142</a></p>
-          <p>Open every day, 6 am to 11 pm local time.</p>
+          <p>Open every day, 6 am to 11 pm New York time.</p>
           <p class="hint">Estimated wait: about 4 minutes. Demo estimate.</p>
         </article>
 
@@ -126,14 +126,27 @@
           <h3>Request a callback</h3>
           <form id="callback-form" class="form-stack">
             <label>Name <input name="name" required autocomplete="name"></label>
-            <label>Phone <input name="phone" type="tel" required autocomplete="tel"></label>
-            <label>When should we call?
-              <select name="when">
-                <option>As soon as possible</option>
-                <option>Later today</option>
-                <option>Tomorrow morning</option>
+            <label>Phone <input name="phone" type="tel" required autocomplete="tel" placeholder="305 555 0123"></label>
+            <fieldset class="trip-type">
+              <legend class="sr">When should we call?</legend>
+              <label><input type="radio" name="when" value="asap" checked> As soon as possible</label>
+              <label><input type="radio" name="when" value="later"> Choose a time</label>
+            </fieldset>
+            <div class="grid callback-time" hidden>
+              <label>Day <select name="day"></select></label>
+              <label>Time (New York) <select name="time"></select></label>
+            </div>
+            <label>Reason (optional)
+              <select name="reason">
+                <option value="">Choose a reason</option>
+                <option value="new_booking">New booking</option>
+                <option value="change_trip">Change a trip</option>
+                <option value="flight_status">Flight status</option>
+                <option value="other">Something else</option>
               </select>
             </label>
+            <label>Booking code (optional) <input name="booking_code" maxlength="6" pattern="[A-Za-z0-9]{6}" autocomplete="off" placeholder="e.g. DEMO01"></label>
+            <p class="hint">We call every day from 6 am to 11 pm New York time.</p>
             <div class="actions"><button class="primary small" type="submit">Request callback</button></div>
             <p id="callback-status" class="status" role="status"></p>
           </form>

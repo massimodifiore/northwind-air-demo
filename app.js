@@ -512,14 +512,87 @@
     emailForm.reset();
   });
 
+  /* Callbacks: the Worker creates a Genesys Cloud callback on the contact center queue.
+     Slots match the contact center hours, 6:00 am to 11:00 pm New York time. */
   const callbackForm = $('#callback-form');
-  callbackForm.addEventListener('submit', (e) => {
+  const callbackTime = $('.callback-time', callbackForm);
+  const NY = 'America/New_York';
+
+  function nyNow() {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+      timeZone: NY, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+    }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+    return { date: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
+  }
+
+  const slotLabel = (m) => {
+    const h = Math.floor(m / 60), mm = String(m % 60).padStart(2, '0');
+    return `${((h + 11) % 12) + 1}:${mm} ${h < 12 ? 'am' : 'pm'}`;
+  };
+
+  function fillTimes() {
+    const now = nyNow();
+    const day = callbackForm.elements.day.value;
+    const sel = callbackForm.elements.time;
+    const keep = sel.value;
+    sel.innerHTML = '';
+    for (let m = 6 * 60; m <= 22 * 60 + 30; m += 30) {
+      if (day === now.date && m <= now.minutes + 15) continue;
+      const v = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      sel.add(new Option(slotLabel(m), v, false, v === keep));
+    }
+  }
+
+  function fillDays() {
+    const now = nyNow();
+    const sel = callbackForm.elements.day;
+    sel.innerHTML = '';
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(now.date, i);
+      if (i === 0 && now.minutes + 15 >= 22 * 60 + 30) continue;
+      const label = new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      sel.add(new Option(i === 0 ? `Today, ${label}` : i === 1 ? `Tomorrow, ${label}` : label, d));
+    }
+    fillTimes();
+  }
+
+  fillDays();
+  callbackForm.elements.day.addEventListener('change', fillTimes);
+  $$('input[name="when"]', callbackForm).forEach((r) => r.addEventListener('change', () => {
+    callbackTime.hidden = callbackForm.elements.when.value !== 'later';
+    if (!callbackTime.hidden) fillDays();
+  }));
+
+  callbackForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!callbackForm.checkValidity()) return callbackForm.reportValidity();
     const f = new FormData(callbackForm);
-    setStatus($('#callback-status'),
-      `Got it, ${f.get('name').trim()}. We will call you at ${f.get('phone')}, ${f.get('when').toLowerCase()}. (Demo: no call is placed.)`, 'ok');
-    callbackForm.reset();
+    const later = f.get('when') === 'later';
+    const status = $('#callback-status');
+    const button = $('button[type="submit"]', callbackForm);
+    button.disabled = true;
+    setStatus(status, 'Booking your callback...');
+    try {
+      const r = await D.requestCallback({
+        name: f.get('name').trim(),
+        phone: f.get('phone').trim(),
+        when: later ? `${f.get('day')}T${f.get('time')}` : 'asap',
+        reason: f.get('reason') || undefined,
+        booking_code: f.get('booking_code').trim() || undefined
+      });
+      const local = r.scheduled_for_utc
+        ? ` (${new Date(r.scheduled_for_utc).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} your time)`
+        : '';
+      const when = r.scheduled_for_utc ? `on ${r.scheduled_for_local}${local}` : 'as soon as a specialist is free';
+      setStatus(status, `Callback booked, ${f.get('name').trim()}. Reference ${r.reference}. We will call ${r.phone} ${when}.`, 'ok');
+      callbackForm.reset();
+      callbackTime.hidden = true;
+      fillDays();
+    } catch (err) {
+      setStatus(status, err.message, 'error');
+    } finally {
+      button.disabled = false;
+    }
   });
 
   /* ---------- Chat: Genesys Cloud Web Messenger (loads on demand) ---------- */
